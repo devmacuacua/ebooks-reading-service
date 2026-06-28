@@ -3,6 +3,14 @@ import { ConfigService } from '@nestjs/config';
 import * as amqplib from 'amqplib';
 import { LibraryService } from '../library/library.service';
 
+interface SubscriptionActivatedMessage {
+  userId: string;
+  subscriptionId: string;
+  planId: string;
+  planName: string;
+  expiresAt: string;
+}
+
 interface OrderPaidMessage {
   userId: string;
   orderId: string;
@@ -118,8 +126,22 @@ export class RabbitMQConsumerService implements OnModuleInit, OnModuleDestroy {
   private async setupQueues() {
     if (!this.channel) return;
 
+    const EXCHANGE = 'ebooks.events';
+    await this.channel.assertExchange(EXCHANGE, 'topic', { durable: true });
+
+    const queues: Array<{ queue: string; routingKey: string }> = [
+      { queue: 'reading.order.paid',              routingKey: 'commerce.order.paid' },
+      { queue: 'reading.subscription.expired',    routingKey: 'subscription.expired' },
+      { queue: 'reading.order.refunded',          routingKey: 'payment.refunded' },
+      { queue: 'reading.subscription.activated',  routingKey: 'subscription.activated' },
+    ];
+
+    for (const { queue, routingKey } of queues) {
+      await this.channel.assertQueue(queue, { durable: true });
+      await this.channel.bindQueue(queue, EXCHANGE, routingKey);
+    }
+
     // Queue: reading.order.paid
-    await this.channel.assertQueue('reading.order.paid', { durable: true });
     await this.channel.consume('reading.order.paid', async (msg) => {
       if (!msg) return;
       try {
@@ -128,12 +150,11 @@ export class RabbitMQConsumerService implements OnModuleInit, OnModuleDestroy {
         this.channel?.ack(msg);
       } catch (err) {
         this.logger.error('Error processing reading.order.paid', (err as Error).message);
-        this.channel?.nack(msg, false, false); // dead-letter without requeue
+        this.channel?.nack(msg, false, false);
       }
     });
 
     // Queue: reading.subscription.expired
-    await this.channel.assertQueue('reading.subscription.expired', { durable: true });
     await this.channel.consume('reading.subscription.expired', async (msg) => {
       if (!msg) return;
       try {
@@ -147,7 +168,6 @@ export class RabbitMQConsumerService implements OnModuleInit, OnModuleDestroy {
     });
 
     // Queue: reading.order.refunded
-    await this.channel.assertQueue('reading.order.refunded', { durable: true });
     await this.channel.consume('reading.order.refunded', async (msg) => {
       if (!msg) return;
       try {
@@ -156,6 +176,19 @@ export class RabbitMQConsumerService implements OnModuleInit, OnModuleDestroy {
         this.channel?.ack(msg);
       } catch (err) {
         this.logger.error('Error processing reading.order.refunded', (err as Error).message);
+        this.channel?.nack(msg, false, false);
+      }
+    });
+
+    // Queue: reading.subscription.activated
+    await this.channel.consume('reading.subscription.activated', async (msg) => {
+      if (!msg) return;
+      try {
+        const content: SubscriptionActivatedMessage = JSON.parse(msg.content.toString());
+        await this.handleSubscriptionActivated(content);
+        this.channel?.ack(msg);
+      } catch (err) {
+        this.logger.error('Error processing reading.subscription.activated', (err as Error).message);
         this.channel?.nack(msg, false, false);
       }
     });
@@ -223,6 +256,52 @@ export class RabbitMQConsumerService implements OnModuleInit, OnModuleDestroy {
     } catch (err) {
       this.logger.error(
         `Failed to revoke access for user=${userId} book=${bookId}`,
+        (err as Error).message,
+      );
+    }
+  }
+
+  private async handleSubscriptionActivated(message: SubscriptionActivatedMessage) {
+    const { userId, expiresAt } = message;
+    const expiryDate = new Date(expiresAt);
+    try {
+      const res = await fetch(
+        `${this.catalogUrl}/books?subscriptionOnly=true&size=500&page=0`,
+      );
+      if (!res.ok) {
+        this.logger.warn(`Catalog returned ${res.status} when fetching subscription books`);
+        return;
+      }
+      const page = await res.json() as {
+        content: Array<{
+          id: string;
+          title: string;
+          coverImage?: string;
+          format?: string;
+          fileKey?: string;
+          totalPages?: number;
+          type: string;
+        }>;
+      };
+      for (const book of page.content) {
+        if (book.type === 'EBOOK' || book.type === 'BOTH') {
+          await this.libraryService.grantAccess({
+            userId,
+            bookId: book.id,
+            bookTitle: book.title,
+            coverImage: book.coverImage,
+            format: book.format,
+            fileKey: book.fileKey,
+            totalPages: book.totalPages,
+            accessType: 'SUBSCRIPTION',
+            expiresAt: expiryDate,
+          });
+        }
+      }
+      this.logger.log(`Granted subscription access to user=${userId}, expires=${expiresAt}`);
+    } catch (err) {
+      this.logger.error(
+        `Failed to grant subscription access for user=${userId}`,
         (err as Error).message,
       );
     }
