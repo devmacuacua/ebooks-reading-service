@@ -26,17 +26,40 @@ interface OrderRefundedMessage {
   bookId: string;
 }
 
+interface BookInternal {
+  fileKey?: string;
+  format?: string;
+  totalPages?: number;
+}
+
 @Injectable()
 export class RabbitMQConsumerService implements OnModuleInit, OnModuleDestroy {
   private readonly logger = new Logger(RabbitMQConsumerService.name);
   private connection: amqplib.ChannelModel | null = null;
   private channel: amqplib.Channel | null = null;
   private isDestroyed = false;
+  private readonly catalogUrl: string;
 
   constructor(
     private readonly configService: ConfigService,
     private readonly libraryService: LibraryService,
-  ) {}
+  ) {
+    this.catalogUrl = this.configService.get<string>(
+      'CATALOG_SERVICE_URL',
+      'http://localhost:8082',
+    );
+  }
+
+  private async fetchBookInternal(bookId: string): Promise<BookInternal | null> {
+    try {
+      const res = await fetch(`${this.catalogUrl}/books/${bookId}/internal`);
+      if (!res.ok) return null;
+      return (await res.json()) as BookInternal;
+    } catch {
+      this.logger.warn(`Could not fetch catalog internal for bookId=${bookId}`);
+      return null;
+    }
+  }
 
   async onModuleInit() {
     await this.connect();
@@ -144,14 +167,28 @@ export class RabbitMQConsumerService implements OnModuleInit, OnModuleDestroy {
     for (const item of items) {
       if (item.bookType === 'EBOOK' || item.bookType === 'BOTH') {
         try {
+          // Enrich with fileKey/format/totalPages from catalog if not in event
+          let fileKey = item.fileKey;
+          let format = item.format;
+          let totalPages = item.totalPages;
+
+          if (!fileKey) {
+            const internal = await this.fetchBookInternal(item.bookId);
+            if (internal) {
+              fileKey = internal.fileKey;
+              format = format ?? internal.format;
+              totalPages = totalPages ?? internal.totalPages;
+            }
+          }
+
           await this.libraryService.grantAccess({
             userId,
             bookId: item.bookId,
             bookTitle: item.bookTitle,
             coverImage: item.bookCover,
-            format: item.format,
-            fileKey: item.fileKey,
-            totalPages: item.totalPages,
+            format,
+            fileKey,
+            totalPages,
             accessType: 'PURCHASED',
           });
           this.logger.log(`Granted access: user=${userId} book=${item.bookId}`);
