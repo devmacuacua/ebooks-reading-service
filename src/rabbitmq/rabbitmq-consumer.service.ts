@@ -276,7 +276,7 @@ export class RabbitMQConsumerService implements OnModuleInit, OnModuleDestroy {
         content: Array<{
           id: string;
           title: string;
-          coverImage?: string;
+          coverImageUrl?: string;
           format?: string;
           fileKey?: string;
           totalPages?: number;
@@ -285,14 +285,23 @@ export class RabbitMQConsumerService implements OnModuleInit, OnModuleDestroy {
       };
       for (const book of page.content) {
         if (book.type === 'EBOOK' || book.type === 'BOTH') {
+          let { fileKey, format, totalPages } = book as any;
+          if (!fileKey) {
+            const internal = await this.fetchBookInternal(book.id);
+            if (internal) {
+              fileKey = internal.fileKey;
+              format = format ?? internal.format;
+              totalPages = totalPages ?? internal.totalPages;
+            }
+          }
           await this.libraryService.grantAccess({
             userId,
             bookId: book.id,
             bookTitle: book.title,
-            coverImage: book.coverImage,
-            format: book.format,
-            fileKey: book.fileKey,
-            totalPages: book.totalPages,
+            coverImage: book.coverImageUrl,
+            format,
+            fileKey,
+            totalPages,
             accessType: 'SUBSCRIPTION',
             expiresAt: expiryDate,
           });
