@@ -1,0 +1,206 @@
+import { Injectable, OnModuleInit, OnModuleDestroy, Logger } from '@nestjs/common';
+import { ConfigService } from '@nestjs/config';
+import * as amqplib from 'amqplib';
+import { LibraryService } from '../library/library.service';
+
+interface OrderPaidMessage {
+  userId: string;
+  orderId: string;
+  items: Array<{
+    bookId: string;
+    bookTitle: string;
+    bookType: 'EBOOK' | 'PHYSICAL' | 'BOTH';
+    bookCover?: string;
+    format?: string;
+    fileKey?: string;
+    totalPages?: number;
+  }>;
+}
+
+interface SubscriptionExpiredMessage {
+  userId: string;
+}
+
+interface OrderRefundedMessage {
+  userId: string;
+  bookId: string;
+}
+
+@Injectable()
+export class RabbitMQConsumerService implements OnModuleInit, OnModuleDestroy {
+  private readonly logger = new Logger(RabbitMQConsumerService.name);
+  private connection: amqplib.ChannelModel | null = null;
+  private channel: amqplib.Channel | null = null;
+  private isDestroyed = false;
+
+  constructor(
+    private readonly configService: ConfigService,
+    private readonly libraryService: LibraryService,
+  ) {}
+
+  async onModuleInit() {
+    await this.connect();
+  }
+
+  async onModuleDestroy() {
+    this.isDestroyed = true;
+    await this.close();
+  }
+
+  private async connect() {
+    const url = this.configService.get<string>('RABBITMQ_URL', 'amqp://localhost:5672');
+
+    try {
+      this.connection = await amqplib.connect(url);
+      this.channel = await this.connection.createChannel();
+
+      this.connection.on('error', (err) => {
+        this.logger.error('RabbitMQ connection error', err.message);
+        this.scheduleReconnect();
+      });
+
+      this.connection.on('close', () => {
+        if (!this.isDestroyed) {
+          this.logger.warn('RabbitMQ connection closed, reconnecting...');
+          this.scheduleReconnect();
+        }
+      });
+
+      await this.setupQueues();
+      this.logger.log('RabbitMQ connected and consumers registered');
+    } catch (err) {
+      this.logger.error('Failed to connect to RabbitMQ', (err as Error).message);
+      this.scheduleReconnect();
+    }
+  }
+
+  private scheduleReconnect() {
+    if (!this.isDestroyed) {
+      setTimeout(() => this.connect(), 5000);
+    }
+  }
+
+  async publishEvent(routingKey: string, payload: Record<string, unknown>) {
+    if (!this.channel) return;
+    const EXCHANGE = 'ebooks.events';
+    await this.channel.assertExchange(EXCHANGE, 'topic', { durable: true });
+    this.channel.publish(
+      EXCHANGE,
+      routingKey,
+      Buffer.from(JSON.stringify(payload)),
+      { persistent: true },
+    );
+  }
+
+  private async setupQueues() {
+    if (!this.channel) return;
+
+    // Queue: reading.order.paid
+    await this.channel.assertQueue('reading.order.paid', { durable: true });
+    await this.channel.consume('reading.order.paid', async (msg) => {
+      if (!msg) return;
+      try {
+        const content: OrderPaidMessage = JSON.parse(msg.content.toString());
+        await this.handleOrderPaid(content);
+        this.channel?.ack(msg);
+      } catch (err) {
+        this.logger.error('Error processing reading.order.paid', (err as Error).message);
+        this.channel?.nack(msg, false, false); // dead-letter without requeue
+      }
+    });
+
+    // Queue: reading.subscription.expired
+    await this.channel.assertQueue('reading.subscription.expired', { durable: true });
+    await this.channel.consume('reading.subscription.expired', async (msg) => {
+      if (!msg) return;
+      try {
+        const content: SubscriptionExpiredMessage = JSON.parse(msg.content.toString());
+        await this.handleSubscriptionExpired(content);
+        this.channel?.ack(msg);
+      } catch (err) {
+        this.logger.error('Error processing reading.subscription.expired', (err as Error).message);
+        this.channel?.nack(msg, false, false);
+      }
+    });
+
+    // Queue: reading.order.refunded
+    await this.channel.assertQueue('reading.order.refunded', { durable: true });
+    await this.channel.consume('reading.order.refunded', async (msg) => {
+      if (!msg) return;
+      try {
+        const content: OrderRefundedMessage = JSON.parse(msg.content.toString());
+        await this.handleOrderRefunded(content);
+        this.channel?.ack(msg);
+      } catch (err) {
+        this.logger.error('Error processing reading.order.refunded', (err as Error).message);
+        this.channel?.nack(msg, false, false);
+      }
+    });
+  }
+
+  private async handleOrderPaid(message: OrderPaidMessage) {
+    const { userId, items } = message;
+
+    for (const item of items) {
+      if (item.bookType === 'EBOOK' || item.bookType === 'BOTH') {
+        try {
+          await this.libraryService.grantAccess({
+            userId,
+            bookId: item.bookId,
+            bookTitle: item.bookTitle,
+            coverImage: item.bookCover,
+            format: item.format,
+            fileKey: item.fileKey,
+            totalPages: item.totalPages,
+            accessType: 'PURCHASED',
+          });
+          this.logger.log(`Granted access: user=${userId} book=${item.bookId}`);
+        } catch (err) {
+          this.logger.error(
+            `Failed to grant access for user=${userId} book=${item.bookId}`,
+            (err as Error).message,
+          );
+        }
+      }
+    }
+  }
+
+  private async handleSubscriptionExpired(message: SubscriptionExpiredMessage) {
+    const { userId } = message;
+    try {
+      await this.libraryService.markSubscriptionsExpired(userId);
+      this.logger.log(`Marked subscription entries as expired for user=${userId}`);
+    } catch (err) {
+      this.logger.error(
+        `Failed to mark subscriptions expired for user=${userId}`,
+        (err as Error).message,
+      );
+    }
+  }
+
+  private async handleOrderRefunded(message: OrderRefundedMessage) {
+    const { userId, bookId } = message;
+    try {
+      await this.libraryService.revokeAccess(userId, bookId);
+      this.logger.log(`Revoked access: user=${userId} book=${bookId}`);
+    } catch (err) {
+      this.logger.error(
+        `Failed to revoke access for user=${userId} book=${bookId}`,
+        (err as Error).message,
+      );
+    }
+  }
+
+  private async close() {
+    try {
+      await this.channel?.close();
+    } catch {
+      // ignore
+    }
+    try {
+      await this.connection?.close();
+    } catch {
+      // ignore
+    }
+  }
+}

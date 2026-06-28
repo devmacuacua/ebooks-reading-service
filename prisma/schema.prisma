@@ -1,0 +1,51 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+model UserLibrary {
+  id          String    @id @default(uuid())
+  userId      String
+  bookId      String
+  bookTitle   String
+  coverImage  String?
+  format      String?
+  fileKey     String?
+  totalPages  Int?
+  accessType  String
+  grantedAt   DateTime  @default(now())
+  expiresAt   DateTime?
+  sessions    ReadingSession[]
+
+  @@unique([userId, bookId])
+}
+
+model ReadingSession {
+  id          String   @id @default(uuid())
+  userId      String
+  libraryId   String
+  bookId      String
+  currentPage Int      @default(0)
+  totalPages  Int?
+  progressPct Float    @default(0)
+  deviceId    String
+  deviceName  String?
+  lastReadAt  DateTime @default(now())
+  createdAt   DateTime @default(now())
+  library     UserLibrary @relation(fields: [libraryId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, bookId, deviceId])
+}
+
+model ReadingToken {
+  id        String   @id @default(uuid())
+  userId    String
+  bookId    String
+  token     String   @unique @default(uuid())
+  deviceId  String
+  expiresAt DateTime
+  createdAt DateTime @default(now())
+}
