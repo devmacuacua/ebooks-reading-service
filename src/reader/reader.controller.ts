@@ -97,17 +97,18 @@ export class ReaderController {
     const result = await this.readerService.getPage(uid, bookId, pageNumber, deviceId, token);
 
     res.set({
-      'Content-Type': 'application/pdf',
       'Cache-Control': 'no-store, no-cache, no-transform, must-revalidate',
       'Pragma': 'no-cache',
       'Expires': '0',
-      'X-Content-Type-Options': 'nosniff',
-      'Content-Disposition': 'inline',
-      'X-New-DRM-Token': result.newToken,
-      'X-New-DRM-Expires': result.newExpiresAt.toISOString(),
     });
 
-    res.send(result.pageData);
+    res.json({
+      pageNumber,
+      totalPages: result.totalPages,
+      pdfBase64: result.pageData.toString('base64'),
+      newToken: result.newToken,
+      tokenExpiresAt: result.newExpiresAt,
+    });
   }
 
   @Post(':bookId/progress')

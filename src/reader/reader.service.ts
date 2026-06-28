@@ -46,7 +46,7 @@ export class ReaderService {
     token: string,
   ): Promise<{
     pageData: Buffer;
-    contentType: string;
+    totalPages: number;
     newToken: string;
     newExpiresAt: Date;
   }> {
@@ -146,7 +146,7 @@ export class ReaderService {
 
     return {
       pageData,
-      contentType: 'application/pdf',
+      totalPages: effectiveTotalPages,
       newToken: tokenResult.newToken,
       newExpiresAt: tokenResult.newExpiresAt,
     };

@@ -14,10 +14,11 @@ export class DrmService {
     userId: string,
     bookId: string,
     deviceId: string,
-  ): Promise<{ token: string; expiresAt: Date }> {
-    const hasAccess = await this.libraryService.hasAccess(userId, bookId);
-    if (!hasAccess) {
-      throw new UnauthorizedException('User does not have access to this book');
+  ): Promise<{ token: string; bookId: string; totalPages: number; expiresAt: Date }> {
+    const entry = await this.libraryService.getEntry(userId, bookId);
+
+    if (entry.expiresAt && entry.expiresAt < new Date()) {
+      throw new UnauthorizedException('Access to this book has expired');
     }
 
     const token = uuidv4();
@@ -33,7 +34,7 @@ export class DrmService {
       },
     });
 
-    return { token, expiresAt };
+    return { token, bookId, totalPages: entry.totalPages ?? 0, expiresAt };
   }
 
   async validateAndRotateToken(

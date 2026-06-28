@@ -269,8 +269,7 @@ export class RabbitMQConsumerService implements OnModuleInit, OnModuleDestroy {
         `${this.catalogUrl}/books?subscriptionOnly=true&size=500&page=0`,
       );
       if (!res.ok) {
-        this.logger.warn(`Catalog returned ${res.status} when fetching subscription books`);
-        return;
+        throw new Error(`Catalog returned ${res.status} when fetching subscription books for user=${userId}`);
       }
       const page = await res.json() as {
         content: Array<{
@@ -285,7 +284,7 @@ export class RabbitMQConsumerService implements OnModuleInit, OnModuleDestroy {
       };
       for (const book of page.content) {
         if (book.type === 'EBOOK' || book.type === 'BOTH') {
-          let { fileKey, format, totalPages } = book as any;
+          let { fileKey, format, totalPages } = book;
           if (!fileKey) {
             const internal = await this.fetchBookInternal(book.id);
             if (internal) {
