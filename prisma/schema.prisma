@@ -22,6 +22,7 @@ model UserLibrary {
   sessions    ReadingSession[]
 
   @@unique([userId, bookId])
+  @@index([userId])
 }
 
 model ReadingSession {

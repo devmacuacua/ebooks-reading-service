@@ -275,6 +275,7 @@ export class RabbitMQConsumerService implements OnModuleInit, OnModuleDestroy {
       const page = await res.json() as {
         content: Array<{
           id: string;
+          slug: string;
           title: string;
           coverImageUrl?: string;
           format?: string;
@@ -297,6 +298,7 @@ export class RabbitMQConsumerService implements OnModuleInit, OnModuleDestroy {
           await this.libraryService.grantAccess({
             userId,
             bookId: book.id,
+            bookSlug: book.slug,
             bookTitle: book.title,
             coverImage: book.coverImageUrl,
             format,
