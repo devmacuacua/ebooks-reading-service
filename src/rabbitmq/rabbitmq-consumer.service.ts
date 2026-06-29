@@ -16,6 +16,7 @@ interface OrderPaidMessage {
   orderId: string;
   items: Array<{
     bookId: string;
+    bookSlug?: string;
     bookTitle: string;
     bookType: 'EBOOK' | 'PHYSICAL' | 'BOTH';
     bookCover?: string;

@@ -6,6 +6,7 @@ import { PrismaModule } from './prisma/prisma.module';
 import { LibraryModule } from './library/library.module';
 import { ReaderModule } from './reader/reader.module';
 import { WishlistModule } from './wishlist/wishlist.module';
+import { BookmarkModule } from './bookmark/bookmark.module';
 import { RabbitMQConsumerModule } from './rabbitmq/rabbitmq-consumer.module';
 import { HealthController } from './health.controller';
 
@@ -27,6 +28,7 @@ import { HealthController } from './health.controller';
     LibraryModule,
     ReaderModule,
     WishlistModule,
+    BookmarkModule,
     RabbitMQConsumerModule,
   ],
 })

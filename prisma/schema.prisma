@@ -66,3 +66,16 @@ model ReadingToken {
   expiresAt DateTime
   createdAt DateTime @default(now())
 }
+
+model Bookmark {
+  id         String   @id @default(uuid())
+  userId     String
+  bookId     String
+  pageNumber Int
+  label      String?
+  createdAt  DateTime @default(now())
+
+  @@unique([userId, bookId, pageNumber])
+  @@index([userId, bookId])
+  @@map("bookmarks")
+}
