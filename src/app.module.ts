@@ -7,6 +7,7 @@ import { LibraryModule } from './library/library.module';
 import { ReaderModule } from './reader/reader.module';
 import { WishlistModule } from './wishlist/wishlist.module';
 import { BookmarkModule } from './bookmark/bookmark.module';
+import { AnnotationModule } from './annotation/annotation.module';
 import { RabbitMQConsumerModule } from './rabbitmq/rabbitmq-consumer.module';
 import { HealthController } from './health.controller';
 
@@ -29,6 +30,7 @@ import { HealthController } from './health.controller';
     ReaderModule,
     WishlistModule,
     BookmarkModule,
+    AnnotationModule,
     RabbitMQConsumerModule,
   ],
 })

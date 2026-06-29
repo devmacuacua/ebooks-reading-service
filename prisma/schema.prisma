@@ -67,6 +67,20 @@ model ReadingToken {
   createdAt DateTime @default(now())
 }
 
+model Annotation {
+  id         String   @id @default(uuid())
+  userId     String
+  bookId     String
+  pageNumber Int
+  content    String
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@unique([userId, bookId, pageNumber])
+  @@index([userId, bookId])
+  @@map("annotations")
+}
+
 model Bookmark {
   id         String   @id @default(uuid())
   userId     String
