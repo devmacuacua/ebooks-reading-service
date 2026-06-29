@@ -22,5 +22,6 @@
     "noImplicitAny": false,
     "strictBindCallApply": false,
     "noFallthroughCasesInSwitch": false
-  }
+  },
+  "exclude": ["node_modules", "dist", "prisma", "prisma.config.ts", "**/*.spec.ts", "**/*.e2e-spec.ts", "test"]
 }
