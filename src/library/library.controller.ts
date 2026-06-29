@@ -35,6 +35,15 @@ export class LibraryController {
     return { hasAccess };
   }
 
+  @Get('recent')
+  async getRecentlyRead(
+    @Headers('x-user-id') userId: string | undefined,
+    @Query('limit') limit?: string,
+  ) {
+    const uid = this.getUserId(userId);
+    return this.libraryService.getRecentlyRead(uid, limit ? parseInt(limit, 10) : 5);
+  }
+
   @Get('book/:bookId')
   async getEntry(
     @Headers('x-user-id') userId: string | undefined,

@@ -117,6 +117,39 @@ export class LibraryService {
     return entry;
   }
 
+  async getRecentlyRead(userId: string, limit = 5) {
+    const entries = await this.prisma.userLibrary.findMany({
+      where: { userId },
+      include: {
+        sessions: {
+          orderBy: { lastReadAt: 'desc' },
+          take: 1,
+        },
+      },
+    });
+
+    return entries
+      .filter((e) => e.sessions.length > 0)
+      .sort((a, b) => {
+        const aTime = a.sessions[0].lastReadAt.getTime();
+        const bTime = b.sessions[0].lastReadAt.getTime();
+        return bTime - aTime;
+      })
+      .slice(0, limit)
+      .map((entry) => ({
+        bookId: entry.bookId,
+        bookSlug: entry.bookSlug,
+        bookTitle: entry.bookTitle,
+        coverImage: entry.coverImage,
+        totalPages: entry.totalPages,
+        currentPage: entry.sessions[0].currentPage,
+        lastReadAt: entry.sessions[0].lastReadAt,
+        progressPercent: entry.totalPages
+          ? Math.round((entry.sessions[0].currentPage / entry.totalPages) * 100)
+          : 0,
+      }));
+  }
+
   async markSubscriptionsExpired(userId: string) {
     await this.prisma.userLibrary.updateMany({
       where: {
