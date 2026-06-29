@@ -40,6 +40,21 @@ model ReadingSession {
   @@unique([userId, bookId, deviceId])
 }
 
+model WishlistItem {
+  id         String   @id @default(uuid())
+  userId     String
+  bookId     String
+  bookSlug   String?
+  bookTitle  String
+  coverImage String?
+  price      Decimal? @db.Decimal(10, 2)
+  addedAt    DateTime @default(now())
+
+  @@unique([userId, bookId])
+  @@index([userId])
+  @@map("wishlist_items")
+}
+
 model ReadingToken {
   id        String   @id @default(uuid())
   userId    String

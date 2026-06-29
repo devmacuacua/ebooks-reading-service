@@ -5,6 +5,7 @@ import { ScheduleModule } from '@nestjs/schedule';
 import { PrismaModule } from './prisma/prisma.module';
 import { LibraryModule } from './library/library.module';
 import { ReaderModule } from './reader/reader.module';
+import { WishlistModule } from './wishlist/wishlist.module';
 import { RabbitMQConsumerModule } from './rabbitmq/rabbitmq-consumer.module';
 import { HealthController } from './health.controller';
 
@@ -17,7 +18,7 @@ import { HealthController } from './health.controller';
     }),
     ThrottlerModule.forRoot([
       {
-        ttl: 60000, // 1 minute in ms
+        ttl: 60000,
         limit: 10,
       },
     ]),
@@ -25,6 +26,7 @@ import { HealthController } from './health.controller';
     PrismaModule,
     LibraryModule,
     ReaderModule,
+    WishlistModule,
     RabbitMQConsumerModule,
   ],
 })
