@@ -217,6 +217,7 @@ export class RabbitMQConsumerService implements OnModuleInit, OnModuleDestroy {
           await this.libraryService.grantAccess({
             userId,
             bookId: item.bookId,
+            bookSlug: item.bookSlug,
             bookTitle: item.bookTitle,
             coverImage: item.bookCover,
             format,

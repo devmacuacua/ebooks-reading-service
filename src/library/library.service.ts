@@ -4,6 +4,7 @@ import { PrismaService } from '../prisma/prisma.service';
 export interface GrantAccessDto {
   userId: string;
   bookId: string;
+  bookSlug?: string;
   bookTitle: string;
   coverImage?: string;
   format?: string;
@@ -18,11 +19,12 @@ export class LibraryService {
   constructor(private readonly prisma: PrismaService) {}
 
   async grantAccess(dto: GrantAccessDto) {
-    const { userId, bookId, bookTitle, coverImage, format, fileKey, totalPages, accessType, expiresAt } = dto;
+    const { userId, bookId, bookSlug, bookTitle, coverImage, format, fileKey, totalPages, accessType, expiresAt } = dto;
 
     return this.prisma.userLibrary.upsert({
       where: { userId_bookId: { userId, bookId } },
       update: {
+        ...(bookSlug && { bookSlug }),
         bookTitle,
         coverImage,
         format,
@@ -35,6 +37,7 @@ export class LibraryService {
       create: {
         userId,
         bookId,
+        bookSlug,
         bookTitle,
         coverImage,
         format,
@@ -83,6 +86,7 @@ export class LibraryService {
     return entries.map((entry) => ({
       id: entry.id,
       bookId: entry.bookId,
+      bookSlug: entry.bookSlug,
       bookTitle: entry.bookTitle,
       coverImage: entry.coverImage,
       format: entry.format,

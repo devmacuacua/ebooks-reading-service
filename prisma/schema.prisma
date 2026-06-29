@@ -10,6 +10,7 @@ model UserLibrary {
   id          String    @id @default(uuid())
   userId      String
   bookId      String
+  bookSlug    String?
   bookTitle   String
   coverImage  String?
   format      String?
